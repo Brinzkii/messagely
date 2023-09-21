@@ -22,7 +22,7 @@ router.post('/login', async (req, res, next) => {
 		if (!result) {
 			throw new ExpressError('Incorrect username/password', 400);
 		} else {
-			let token = jwt.sign({ username }, SECRET_KEY);
+			let token = jwt.sign({ username }, SECRET_KEY, { expiresIn: 60 * 120 });
 			return res.json({ token });
 		}
 	} catch (err) {
@@ -48,7 +48,8 @@ router.post('/register', async (req, res, next) => {
 
 		let user = { username, password, first_name, last_name, phone };
 		user = await User.register(user);
-		let token = jwt.sign({ username }, SECRET_KEY);
+		await User.authenticate(user.username, password);
+		let token = jwt.sign({ username }, SECRET_KEY, { expiresIn: 60 * 120 });
 		return res.json({ token });
 	} catch (err) {
 		return next(err);

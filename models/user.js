@@ -16,13 +16,13 @@ class User {
 		const time = getTime();
 		const hashPwd = await bcrypt.hash(password, BCRYPT_WORK_FACTOR);
 		const result = await db.query(
-			`INSERT INTO users (username, password, first_name, last_name, phone, join_at, last_login_at) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING username, password, first_name, last_name, phone`,
+			`INSERT INTO users (username, password, first_name, last_name, phone, join_at) VALUES ($1, $2, $3, $4, $5, $6) RETURNING username, password, first_name, last_name, phone`,
 			[username, hashPwd, first_name, last_name, phone, time]
 		);
 
 		if (result.rowCount === 0) throw new ExpressError('Error occurred while registering, please try again', 400);
 
-		return result.json(result.rows[0]);
+		return result.rows[0];
 	}
 
 	/** Authenticate: is this username/password valid? Returns boolean. */
@@ -37,7 +37,7 @@ class User {
 
 		if (user) {
 			if ((await bcrypt.compare(password, user.password)) === true) {
-				User.updateLoginTimestamp(username);
+				await User.updateLoginTimestamp(username);
 				return true;
 			}
 		}
@@ -49,7 +49,7 @@ class User {
 	static async updateLoginTimestamp(username) {
 		const time = getTime();
 		const result = await db.query(
-			`INSERT INTO users
+			`UPDATE users
 		SET last_login_at = $1 WHERE username = $2
 		RETURNING username`,
 			[time, username]
@@ -104,10 +104,18 @@ class User {
 		);
 		let msgs = results.rows;
 
-		// if (!msgs) throw new ExpressError('No messages sent from that user', 400);
-
-		msgs.map((m) => (m.to_username = User.get(m.to_username)));
-		return Promise.all(msgs);
+		for (let m of msgs) {
+			let u = m.to_username;
+			delete m.to_username;
+			const result = await User.get(u);
+			m.to_user = {
+				username: result.username,
+				first_name: result.first_name,
+				last_name: result.last_name,
+				phone: result.phone,
+			};
+		}
+		return msgs;
 	}
 
 	/** Return messages to this user.
@@ -125,10 +133,19 @@ class User {
 		);
 		let msgs = results.rows;
 
-		// if (!msgs) throw new ExpressError('No messages sent to that user', 400);
+		for (let m of msgs) {
+			let u = m.from_username;
+			delete m.from_username;
+			const result = await User.get(u);
+			m.from_user = {
+				username: result.username,
+				first_name: result.first_name,
+				last_name: result.last_name,
+				phone: result.phone,
+			};
+		}
 
-		msgs.map((m) => (m.from_username = User.get(m.from_username)));
-		return Promise.all(msgs);
+		return msgs;
 	}
 }
 
